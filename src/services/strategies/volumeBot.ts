@@ -145,13 +145,13 @@ export class VolumeBot {
         );
         
         // Use the outAmount from the first quote to determine how many tokens to sell
-        const tokenAmount = BigInt(quoteResponse.expectedOutputAmount.toString());
+        const tokenAmount = quoteResponse.expectedOutputAmount; // Already in raw units
         
         // Now get the actual sell quote using the token amount
         const sellQuote = await this.swapService.getQuote(
           this.config.tokenMint,
           solMint,
-          Number(tokenAmount) / Math.pow(10, tokenDecimals),
+          tokenAmount, // Pass the raw amount directly as bigint
           100
         );
         
@@ -181,7 +181,7 @@ export class VolumeBot {
       const quote = await this.swapService.getQuote(
         inputMint,
         outputMint,
-        isBuy ? Number(amount) / 1e9 : Number(amount),
+        amount, // Pass the raw amount directly
         100
       );
 

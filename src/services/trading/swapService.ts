@@ -17,15 +17,24 @@ export class SwapService {
   async getQuote(
     inputMint: PublicKey,
     outputMint: PublicKey,
-    amount: number,
+    amount: number | bigint,
     slippageBps: number = 10
   ): Promise<SwapQuote> {
     try {
-      // Get input token decimals
-      const inputDecimals = await this.tokenService.getTokenDecimals(inputMint);
-      
-      // Convert amount to proper decimal places
-      const amountInSmallestUnit = Math.floor(amount * Math.pow(10, inputDecimals));
+      // If amount is a number, convert it to raw amount using decimals
+      let amountInSmallestUnit: bigint;
+      if (typeof amount === 'number') {
+        const inputDecimals = await this.tokenService.getTokenDecimals(inputMint);
+        amountInSmallestUnit = BigInt(Math.floor(amount * Math.pow(10, inputDecimals)));
+      } else {
+        // For bigint, use it directly - it's already in raw units
+        amountInSmallestUnit = amount;
+      }
+
+      // Debug logging for amount conversion
+      console.log('Amount conversion debug:');
+      console.log('Original amount:', amount);
+      console.log('Converted amount:', amountInSmallestUnit.toString());
       
       const queryParams = {
         inputMint: inputMint.toString(),
@@ -82,6 +91,34 @@ export class SwapService {
 
     while (attempt < MAX_RETRIES) {
       try {
+        // Special handling for SOL balance
+        const SOL_MINT = new PublicKey("So11111111111111111111111111111111111111112");
+        let balance: bigint;
+        
+        if (quote.inputMint.equals(SOL_MINT)) {
+          // For SOL, get the SOL balance directly
+          const solBalance = await this.connection.getBalance(wallet.publicKey);
+          balance = BigInt(solBalance);
+          
+          // Log the balance check
+          console.log(`Checking SOL balance: ${solBalance} lamports`);
+          console.log(`Required amount: ${quote.amount} lamports`);
+          
+          if (balance < quote.amount) {
+            throw new Error(`Insufficient SOL balance. Required: ${quote.amount}, Available: ${balance}`);
+          }
+        } else {
+          // For other tokens, use the existing token balance check
+          const inputBalance = await this.tokenService.getTokenBalance(quote.inputMint, wallet.publicKey);
+          if (!inputBalance) {
+            throw new Error(`No token account found for ${quote.inputMint.toString()}`);
+          }
+          
+          if (inputBalance.amount < quote.amount) {
+            throw new Error(`Insufficient balance. Required: ${quote.amount}, Available: ${inputBalance.amount}`);
+          }
+        }
+
         const swapRequestBody = {
           quoteResponse: {
             inputMint: quote.inputMint.toString(),
@@ -90,7 +127,7 @@ export class SwapService {
             outAmount: quote.expectedOutputAmount.toString(),
             otherAmountThreshold: quote.expectedOutputAmount.toString(),
             swapMode: "ExactIn",
-            slippageBps: 10,
+            slippageBps: quote.slippage,
             platformFee: undefined,
             priceImpactPct: quote.priceImpact.toString(),
             routePlan: [{
