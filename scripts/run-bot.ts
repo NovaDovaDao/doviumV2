@@ -13,8 +13,8 @@ async function main() {
   const wallet = Keypair.fromSecretKey(bs58.decode(process.env.WALLET_PRIVATE_KEY!));
 
   const config: VolumeStrategyConfig = {
-    minSolAmount: 0.001,
-    maxSolAmount: 0.01,
+    minSolAmount: 0.01,
+    maxSolAmount: 0.05,
     minInterval: 1000,
     maxInterval: 5000,
     targetDailyVolume: 1000,
