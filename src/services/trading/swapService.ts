@@ -18,15 +18,19 @@ export class SwapService {
     inputMint: PublicKey,
     outputMint: PublicKey,
     amount: number,
-    slippageBps: number = 100
+    slippageBps: number = 10
   ): Promise<SwapQuote> {
     try {
-      const amountInLamports = Math.floor(amount * Math.pow(10, 9));
+      // Get input token decimals
+      const inputDecimals = await this.tokenService.getTokenDecimals(inputMint);
+      
+      // Convert amount to proper decimal places
+      const amountInSmallestUnit = Math.floor(amount * Math.pow(10, inputDecimals));
       
       const queryParams = {
         inputMint: inputMint.toString(),
         outputMint: outputMint.toString(),
-        amount: amountInLamports.toString(),
+        amount: amountInSmallestUnit.toString(),
         slippageBps: slippageBps.toString(),
         onlyDirectRoutes: 'true'
       };
@@ -61,9 +65,9 @@ export class SwapService {
       return {
         inputMint,
         outputMint,
-        amount: BigInt(amountInLamports),
+        amount: BigInt(amountInSmallestUnit),
         expectedOutputAmount: BigInt(quoteResponse.outAmount),
-        slippage: slippageBps / 10000,
+        slippage: slippageBps,
         priceImpact: Number(quoteResponse.priceImpactPct || 0)
       };
     } catch (error) {
@@ -86,7 +90,7 @@ export class SwapService {
             outAmount: quote.expectedOutputAmount.toString(),
             otherAmountThreshold: quote.expectedOutputAmount.toString(),
             swapMode: "ExactIn",
-            slippageBps: Math.floor(quote.slippage * 10000),
+            slippageBps: 10,
             platformFee: undefined,
             priceImpactPct: quote.priceImpact.toString(),
             routePlan: [{
@@ -154,9 +158,9 @@ export class SwapService {
           new Promise((_, reject) => 
             setTimeout(() => reject(new Error('Confirmation timeout')), 30000)
           )
-        ]);
+        ]) as { value: { err: any } | null };
 
-        if (typeof confirmation === 'object' && confirmation.value.err) {
+        if (confirmation?.value?.err) {
           if (attempt < MAX_RETRIES - 1) {
             console.log(`Transaction failed on attempt ${attempt + 1}, retrying...`);
             attempt++;
@@ -170,6 +174,22 @@ export class SwapService {
         return txid;
 
       } catch (error) {
+        // Check if it's a SendTransactionError
+        if (error instanceof Error && 'logs' in error) {
+          const logs = (error as any).logs as string[];
+          console.log('Transaction logs:', logs);
+
+          // Check for insufficient funds error
+          if (logs.some(log => log.includes('insufficient funds'))) {
+            throw new Error('Insufficient funds for swap');
+          }
+
+          // Log full error details
+          if (logs.length > 0) {
+            console.error('Detailed transaction error logs:', logs.join('\n'));
+          }
+        }
+
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         
         // Handle specific error cases

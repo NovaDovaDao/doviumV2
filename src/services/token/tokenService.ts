@@ -15,9 +15,35 @@ import BigNumber from 'bignumber.js';
 
 export class TokenService {
   private connection: Connection;
+  private decimalsCache: Map<string, number> = new Map();
 
   constructor(connection: Connection) {
     this.connection = connection;
+  }
+
+  async getTokenDecimals(mint: PublicKey): Promise<number> {
+    const mintKey = mint.toString();
+    
+    // Check cache first
+    if (this.decimalsCache.has(mintKey)) {
+      return this.decimalsCache.get(mintKey)!;
+    }
+
+    // Special case for SOL
+    if (mintKey === "So11111111111111111111111111111111111111112") {
+      this.decimalsCache.set(mintKey, 9);
+      return 9;
+    }
+
+    try {
+      const mintInfo = await getMint(this.connection, mint);
+      const decimals = mintInfo.decimals;
+      this.decimalsCache.set(mintKey, decimals);
+      return decimals;
+    } catch (error) {
+      console.error(`Failed to get decimals for mint ${mintKey}:`, error);
+      throw error;
+    }
   }
 
   async getTokenBalance(
@@ -33,32 +59,33 @@ export class TokenService {
       );
 
       const account = await this.connection.getAccountInfo(associatedAddress);
+      const decimals = await this.getTokenDecimals(mint);
       
       if (!account) {
         return {
           mint,
           owner,
           amount: BigInt(0),
-          decimals: (await this.getTokenInfo(mint))?.metadata.decimals || 0
+          decimals
         };
       }
 
       const tokenAccount = await getAccount(this.connection, associatedAddress);
-      const mintInfo = await getMint(this.connection, mint);
 
       return {
         mint,
         owner,
         amount: BigInt(tokenAccount.amount.toString()),
-        decimals: mintInfo.decimals
+        decimals
       };
     } catch (error) {
       if (error instanceof Error && error.message.includes('could not find account')) {
+        const decimals = await this.getTokenDecimals(mint);
         return {
           mint,
           owner,
           amount: BigInt(0),
-          decimals: (await this.getTokenInfo(mint))?.metadata.decimals || 0
+          decimals
         };
       }
       throw new Error(`Failed to get token balance: ${error instanceof Error ? error.message : 'Unknown error'}`);

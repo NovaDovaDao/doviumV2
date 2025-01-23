@@ -7,6 +7,7 @@ export interface SwapQuote {
   expectedOutputAmount: bigint;
   slippage: number;
   priceImpact: number;
+  quoteResponse?: any;
 }
 
 export interface Order {
