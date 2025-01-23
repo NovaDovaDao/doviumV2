@@ -486,3 +486,390 @@ The backend returns a response with a serialized transaction that is already usi
     },
     "simulationError": null
 }
+
+POST /swap
+Returns a transaction that you can use from the quote you get from /quote.
+
+Request Body — REQUIRED
+userPublicKey string — REQUIRED
+The user public key.
+
+wrapAndUnwrapSol boolean
+Default is true. If true, will automatically wrap/unwrap SOL. If false, it will use wSOL token account. Will be ignored if destinationTokenAccount is set because the destinationTokenAccount may belong to a different user that we have no authority to close.
+
+useSharedAccounts boolean
+This enables the usage of shared program accounts. That means no intermediate token accounts or open orders accounts need to be created for the users. If you are using destinationTokenAccount, you must set this to true. If this is not set, this will be set to false in the case that the route plan is just through one simple AMM that isn't Openbook or Serum. Otherwise, it will be set to true.
+
+feeAccount string
+Fee token account, it can be either the input mint or the output mint for ExactIn and only the input mint for ExactOut, you can use any token account of the correct mint (it no longer needs the Referral program). It doesn't support Token2022 tokens.
+
+trackingAccount string
+Tracking account, this can be any public key that you can use to track the transactions, especially useful for integrator. Then, you can use the https://stats.jup.ag/tracking-account/:public-key/YYYY-MM-DD/HH endpoint to get all the swap transactions from this public key.
+
+computeUnitPriceMicroLamports integer
+The compute unit price to prioritize the transaction, the additional fee will be computeUnitLimit (1400000) * computeUnitPriceMicroLamports. If auto is used, Jupiter will automatically set a priority fee and it will be capped at 5,000,000 lamports / 0.005 SOL.
+
+prioritizationFeeLamports integer
+Prioritization fee lamports paid for the transaction in addition to the signatures fee. Mutually exclusive with compute_unit_price_micro_lamports. If auto is used, Jupiter will automatically set a priority fee and it will be capped at 5,000,000 lamports / 0.005 SOL. If autoMultiplier ({"autoMultiplier"}: 3}) is used, the priority fee will be a multplier on the auto fee. If jitoTipLamports ({"jitoTipLamports": 5000}) is used, a tip intruction will be included to Jito and no priority fee will be set. If priorityLevelWithMaxLamports ({"priorityLevelWithMaxLamports": {"priorityLevel": "high", "maxLamports": 123423}}) is used, it will suggest a priority fee based on medium, high, or veryHigh automatically with a cap set by maxLamports.
+
+asLegacyTransaction boolean
+Default is false. Request a legacy transaction rather than the default versioned transaction, needs to be paired with a quote using asLegacyTransaction otherwise the transaction might be too large.
+
+useTokenLedger boolean
+Default is false. This is useful when the instruction before the swap has a transfer that increases the input token amount. Then, the swap will just use the difference between the token ledger token amount and post token amount.
+
+destinationTokenAccount string
+Public key of the token account that will be used to receive the token out of the swap. If not provided, the user's ATA will be used. If provided, we assume that the token account is already initialized.
+
+dynamicComputeUnitLimit boolean
+When enabled, it will do a swap simulation to get the compute unit used and set it in ComputeBudget's compute unit limit. This will increase latency slightly since there will be one extra RPC call to simulate this. Default is false.
+
+skipUserAccountsRpcCalls boolean
+When enabled, it will not do any rpc calls check on user's accounts. Enable it only when you already setup all the accounts needed for the trasaction, like wrapping or unwrapping sol, destination account is already created.
+
+dynamicSlippage object
+A dynamic slippage estimation based on a set of heuristics that accounts for the type of token traded and user's max slippage tolerance, providing an optimal value that safeguards the user while ensuring success rate.
+
+minBps int32
+The user min slippage.
+
+maxBps int32
+The user max slippage, note that jup.ag UI defaults to 300bps (3%).
+
+quoteResponse object — REQUIRED
+inputMint string — REQUIRED
+inAmount string — REQUIRED
+outputMint string — REQUIRED
+outAmount string — REQUIRED
+otherAmountThreshold string — REQUIRED
+swapMode string — REQUIRED
+Possible values: [ExactIn, ExactOut]
+
+slippageBps int32 — REQUIRED
+platformFee object
+amount string
+feeBps int32
+priceImpactPct string — REQUIRED
+routePlan object[] — REQUIRED
+swapInfo object — REQUIRED
+ammKey string — REQUIRED
+label string
+inputMint string — REQUIRED
+outputMint string — REQUIRED
+inAmount string — REQUIRED
+outAmount string — REQUIRED
+feeAmount string — REQUIRED
+feeMint string — REQUIRED
+percent int32 — REQUIRED
+contextSlot number
+timeTaken number
+Responses
+200
+Successful response
+
+Schema — OPTIONAL
+swapTransaction string
+lastValidBlockHeight number
+prioritizationFeeLamports number — OPTIONAL
+dynamicSlippageReport object — OPTIONAL
+slippageBps int32 — OPTIONAL
+otherAmount int32 — OPTIONAL
+simulatedIncurredSlippageBps int32 — OPTIONAL
+amplificationRatio string — OPTIONAL
+Previous
+GET /quote
+const axios = require('axios');
+let data = JSON.stringify({
+  "userPublicKey": "string",
+  "wrapAndUnwrapSol": true,
+  "useSharedAccounts": true,
+  "feeAccount": "string",
+  "trackingAccount": "string",
+  "computeUnitPriceMicroLamports": 0,
+  "prioritizationFeeLamports": 0,
+  "asLegacyTransaction": false,
+  "useTokenLedger": false,
+  "destinationTokenAccount": "string",
+  "dynamicComputeUnitLimit": true,
+  "skipUserAccountsRpcCalls": true,
+  "dynamicSlippage": {
+    "minBps": 0,
+    "maxBps": 0
+  },
+  "quoteResponse": {
+    "inputMint": "string",
+    "inAmount": "string",
+    "outputMint": "string",
+    "outAmount": "string",
+    "otherAmountThreshold": "string",
+    "swapMode": "ExactIn",
+    "slippageBps": 0,
+    "platformFee": {
+      "amount": "string",
+      "feeBps": 0
+    },
+    "priceImpactPct": "string",
+    "routePlan": [
+      {
+        "swapInfo": {
+          "ammKey": "string",
+          "label": "string",
+          "inputMint": "string",
+          "outputMint": "string",
+          "inAmount": "string",
+          "outAmount": "string",
+          "feeAmount": "string",
+          "feeMint": "string"
+        },
+        "percent": 0
+      }
+    ],
+    "contextSlot": 0,
+    "timeTaken": 0
+  }
+});
+
+
+let config = {
+  method: 'post',
+  maxBodyLength: Infinity,
+  url: 'https://quote-api.jup.ag/v6/swap',
+  headers: { 
+    'Content-Type': 'application/json', 
+    'Accept': 'application/json'
+  },
+  data : data
+};
+
+
+axios.request(config)
+.then((response) => {
+  console.log(JSON.stringify(response.data));
+})
+.catch((error) => {
+  console.log(error);
+});
+
+POST /swap-instructions
+Returns instructions that you can use from the quote you get from /quote.
+
+Request Body — REQUIRED
+userPublicKey string — REQUIRED
+The user public key.
+
+wrapAndUnwrapSol boolean
+Default is true. If true, will automatically wrap/unwrap SOL. If false, it will use wSOL token account. Will be ignored if destinationTokenAccount is set because the destinationTokenAccount may belong to a different user that we have no authority to close.
+
+useSharedAccounts boolean
+This enables the usage of shared program accounts. That means no intermediate token accounts or open orders accounts need to be created for the users. If you are using destinationTokenAccount, you must set this to true. If this is not set, this will be set to false in the case that the route plan is just through one simple AMM that isn't Openbook or Serum. Otherwise, it will be set to true.
+
+feeAccount string
+Fee token account, it can be either the input mint or the output mint for ExactIn and only the input mint for ExactOut, you can use any token account of the correct mint (it no longer needs the Referral program). It doesn't support Token2022 tokens.
+
+trackingAccount string
+Tracking account, this can be any public key that you can use to track the transactions, especially useful for integrator. Then, you can use the https://stats.jup.ag/tracking-account/:public-key/YYYY-MM-DD/HH endpoint to get all the swap transactions from this public key.
+
+computeUnitPriceMicroLamports integer
+The compute unit price to prioritize the transaction, the additional fee will be computeUnitLimit (1400000) * computeUnitPriceMicroLamports. If auto is used, Jupiter will automatically set a priority fee and it will be capped at 5,000,000 lamports / 0.005 SOL.
+
+prioritizationFeeLamports integer
+Prioritization fee lamports paid for the transaction in addition to the signatures fee. Mutually exclusive with compute_unit_price_micro_lamports. If auto is used, Jupiter will automatically set a priority fee and it will be capped at 5,000,000 lamports / 0.005 SOL. If autoMultiplier ({"autoMultiplier"}: 3}) is used, the priority fee will be a multplier on the auto fee. If jitoTipLamports ({"jitoTipLamports": 5000}) is used, a tip intruction will be included to Jito and no priority fee will be set. If priorityLevelWithMaxLamports ({"priorityLevelWithMaxLamports": {"priorityLevel": "high", "maxLamports": 123423}}) is used, it will suggest a priority fee based on medium, high, or veryHigh automatically with a cap set by maxLamports.
+
+asLegacyTransaction boolean
+Default is false. Request a legacy transaction rather than the default versioned transaction, needs to be paired with a quote using asLegacyTransaction otherwise the transaction might be too large.
+
+useTokenLedger boolean
+Default is false. This is useful when the instruction before the swap has a transfer that increases the input token amount. Then, the swap will just use the difference between the token ledger token amount and post token amount.
+
+destinationTokenAccount string
+Public key of the token account that will be used to receive the token out of the swap. If not provided, the user's ATA will be used. If provided, we assume that the token account is already initialized.
+
+dynamicComputeUnitLimit boolean
+When enabled, it will do a swap simulation to get the compute unit used and set it in ComputeBudget's compute unit limit. This will increase latency slightly since there will be one extra RPC call to simulate this. Default is false.
+
+skipUserAccountsRpcCalls boolean
+When enabled, it will not do any rpc calls check on user's accounts. Enable it only when you already setup all the accounts needed for the trasaction, like wrapping or unwrapping sol, destination account is already created.
+
+dynamicSlippage object
+A dynamic slippage estimation based on a set of heuristics that accounts for the type of token traded and user's max slippage tolerance, providing an optimal value that safeguards the user while ensuring success rate.
+
+minBps int32
+The user min slippage.
+
+maxBps int32
+The user max slippage, note that jup.ag UI defaults to 300bps (3%).
+
+quoteResponse object — REQUIRED
+inputMint string — REQUIRED
+inAmount string — REQUIRED
+outputMint string — REQUIRED
+outAmount string — REQUIRED
+otherAmountThreshold string — REQUIRED
+swapMode string — REQUIRED
+Possible values: [ExactIn, ExactOut]
+
+slippageBps int32 — REQUIRED
+platformFee object
+amount string
+feeBps int32
+priceImpactPct string — REQUIRED
+routePlan object[] — REQUIRED
+swapInfo object — REQUIRED
+ammKey string — REQUIRED
+label string
+inputMint string — REQUIRED
+outputMint string — REQUIRED
+inAmount string — REQUIRED
+outAmount string — REQUIRED
+feeAmount string — REQUIRED
+feeMint string — REQUIRED
+percent int32 — REQUIRED
+contextSlot number
+timeTaken number
+Responses
+200
+Successful response
+
+Schema — OPTIONAL
+tokenLedgerInstruction object — OPTIONAL
+programId string
+accounts object[]
+pubkey string
+isSigner boolean
+isWritable boolean
+data string
+otherInstructions object
+programId string
+accounts object[]
+pubkey string
+isSigner boolean
+isWritable boolean
+data string
+computeBudgetInstructions object[]
+The necessary instructions to setup the compute budget.
+
+programId string
+accounts object[]
+pubkey string
+isSigner boolean
+isWritable boolean
+data string
+setupInstructions object[]
+Setup missing ATA for the users.
+
+programId string
+accounts object[]
+pubkey string
+isSigner boolean
+isWritable boolean
+data string
+swapInstruction object
+programId string
+accounts object[]
+pubkey string
+isSigner boolean
+isWritable boolean
+data string
+cleanupInstruction object — OPTIONAL
+programId string
+accounts object[]
+pubkey string
+isSigner boolean
+isWritable boolean
+data string
+addressLookupTableAddresses string[]
+The lookup table addresses that you can use if you are using versioned transaction.
+
+const axios = require('axios');
+let data = JSON.stringify({
+  "userPublicKey": "string",
+  "wrapAndUnwrapSol": true,
+  "useSharedAccounts": true,
+  "feeAccount": "string",
+  "trackingAccount": "string",
+  "computeUnitPriceMicroLamports": 0,
+  "prioritizationFeeLamports": 0,
+  "asLegacyTransaction": false,
+  "useTokenLedger": false,
+  "destinationTokenAccount": "string",
+  "dynamicComputeUnitLimit": true,
+  "skipUserAccountsRpcCalls": true,
+  "dynamicSlippage": {
+    "minBps": 0,
+    "maxBps": 0
+  },
+  "quoteResponse": {
+    "inputMint": "string",
+    "inAmount": "string",
+    "outputMint": "string",
+    "outAmount": "string",
+    "otherAmountThreshold": "string",
+    "swapMode": "ExactIn",
+    "slippageBps": 0,
+    "platformFee": {
+      "amount": "string",
+      "feeBps": 0
+    },
+    "priceImpactPct": "string",
+    "routePlan": [
+      {
+        "swapInfo": {
+          "ammKey": "string",
+          "label": "string",
+          "inputMint": "string",
+          "outputMint": "string",
+          "inAmount": "string",
+          "outAmount": "string",
+          "feeAmount": "string",
+          "feeMint": "string"
+        },
+        "percent": 0
+      }
+    ],
+    "contextSlot": 0,
+    "timeTaken": 0
+  }
+});
+
+
+let config = {
+  method: 'post',
+  maxBodyLength: Infinity,
+  url: 'https://quote-api.jup.ag/v6/swap-instructions',
+  headers: { 
+    'Content-Type': 'application/json', 
+    'Accept': 'application/json'
+  },
+  data : data
+};
+
+
+axios.request(config)
+.then((response) => {
+  console.log(JSON.stringify(response.data));
+})
+.catch((error) => {
+  console.log(error);
+});
+
+const axios = require('axios');
+
+
+let config = {
+  method: 'get',
+  maxBodyLength: Infinity,
+  url: 'https://quote-api.jup.ag/v6/tokens',
+  headers: { 
+    'Accept': 'application/json'
+  }
+};
+
+
+axios.request(config)
+.then((response) => {
+  console.log(JSON.stringify(response.data));
+})
+.catch((error) => {
+  console.log(error);
+});
+

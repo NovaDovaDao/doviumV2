@@ -63,26 +63,71 @@ export class VolumeBot {
       const solMint = new PublicKey("So11111111111111111111111111111111111111112");
       
       const [inputMint, outputMint] = isBuy 
-        ? [this.config.tokenMint, solMint]
-        : [solMint, this.config.tokenMint];
+        ? [solMint, this.config.tokenMint]
+        : [this.config.tokenMint, solMint];
 
       console.log(`Executing ${isBuy ? 'BUY' : 'SELL'} for ${Number(amount) / 1e9} SOL`);
+
+      // Add balance check before trade
+      const balance = await this.connection.getBalance(this.wallet.publicKey);
+      if (balance < Number(amount)) {
+        throw new Error('Insufficient balance for trade');
+      }
 
       const quote = await this.swapService.getQuote(
         inputMint,
         outputMint,
-        Number(amount) / 1e9, // Convert lamports to SOL
+        Number(amount) / 1e9,
         100 // 1% slippage
       );
 
+      // Add price impact check
+      if (quote.priceImpact > 5) { // 5% max price impact
+        throw new Error(`Price impact too high: ${quote.priceImpact}%`);
+      }
+
       const txid = await this.swapService.executeSwap(quote, this.wallet);
+      
+      // Wait for confirmation
+      const latestBlockhash = await this.connection.getLatestBlockhash();
+      await this.connection.confirmTransaction({
+        signature: txid,
+        blockhash: latestBlockhash.blockhash,
+        lastValidBlockHeight: latestBlockhash.lastValidBlockHeight
+      });
+
       this.totalVolume += Number(amount) / 1e9;
       this.lastTradeTime = Date.now();
       
       await this.callbacks?.onTrade?.(txid, isBuy, amount);
-      console.log(`Trade executed: ${txid}`);
+      console.log(`Trade executed successfully: ${txid}`);
+
     } catch (error) {
       console.error('Trade execution failed:', error);
+      // Handle specific Jupiter API errors
+      if (error instanceof Error) {
+        if (error.message.includes('Unprocessable Entity') || 
+            error.message.includes('Route not found') ||
+            error.message.includes('insufficient funds')) {
+          console.log('Retrying trade with different parameters...');
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          return this.executeTrade(isBuy);
+        }
+        
+        if (error.message.includes('Transaction failed')) {
+          console.log('Transaction failed, checking confirmation...');
+          // Add longer delay for transaction failures
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          return this.executeTrade(isBuy);
+        }
+
+        if (error.message.includes('Too many requests')) {
+          console.log('Rate limit hit, waiting longer...');
+          await new Promise(resolve => setTimeout(resolve, 10000));
+          return this.executeTrade(isBuy);
+        }
+      }
+      
       this.callbacks?.onError?.(error as Error);
     }
   }
