@@ -1,8 +1,8 @@
 import { Connection, PublicKey, Keypair } from '@solana/web3.js';
 import { Program, AnchorProvider, Wallet, BorshEventCoder } from '@coral-xyz/anchor';
-import { type PumpFun } from '../IDL/pump-fun';
+import { type PumpFun } from '../src/services/pumpfun/IDL/pump-fun';
 import * as dotenv from 'dotenv';
-import * as IDL from '../IDL/pump-fun.json';
+import * as IDL from '../src/services/pumpfun/IDL/pump-fun.json';
 
 class Logger {
   info(message: string, data?: any) {
