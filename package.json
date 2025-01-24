@@ -9,6 +9,7 @@
     "start:pump-fun-bot": "ts-node scripts/pump-fun-bot.ts",
     "start:token-listener-bot": "ts-node scripts/tokenListener.ts",
     "start:volume-bot": "ts-node scripts/run-bot.ts",
+    "monitor:tokens": "ts-node scripts/token-monitor.ts",
     "build": "tsc",
     "test": "jest",
     "lint": "eslint src --ext .ts"
@@ -24,6 +25,7 @@
     "js-sha256": "^0.11.0"
   },
   "devDependencies": {
+    "@types/bn.js": "^5.1.6",
     "@types/node": "^20.11.16",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",
