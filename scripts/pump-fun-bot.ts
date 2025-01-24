@@ -1,25 +1,70 @@
 import { Connection, Keypair, PublicKey } from '@solana/web3.js';
-import { VolumeBot, VolumeStrategyConfig } from '../src/services/strategies/volumeBot';
+import { PumpStrategy } from '../src/services/strategies/PumpStrategy';
+import { PumpFunSDK } from '../src/services/pumpfun/pumpfun';
+import { SwapService } from '../src/services/trading/swapService';
+import { OrderService } from '../src/services/trading/orderService';
+import { Provider, AnchorProvider, Wallet } from '@coral-xyz/anchor';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 async function main() {
-  const connection = new Connection(process.env.SOLANA_RPC_URL!);
-  const wallet = Keypair.fromSecretKey(Buffer.from(process.env.WALLET_PRIVATE_KEY!, 'base64'));
+  if (!process.env.SOLANA_RPC_URL || !process.env.WALLET_PRIVATE_KEY) {
+    throw new Error('Missing required environment variables');
+  }
 
-  const config: VolumeStrategyConfig = {
-    minSolAmount: 0.01,
-    maxSolAmount: 0.05,
-    minInterval: 1000,
-    maxInterval: 5000,
-    targetDailyVolume: 1000,
-    stopLoss: 10,
-    tokenMint: new PublicKey(process.env.TOKEN_MINT!)
-  };
+  const connection = new Connection(process.env.SOLANA_RPC_URL, {
+    commitment: 'processed',
+    wsEndpoint: process.env.SOLANA_WS_URL
+  });
 
-  const bot = new VolumeBot(connection, wallet, config);
-  await bot.start();
+  const keypair = Keypair.fromSecretKey(
+    Buffer.from(process.env.WALLET_PRIVATE_KEY, 'base64')
+  );
+  
+  const wallet = new Wallet(keypair);
+  const provider = new AnchorProvider(connection, wallet, {
+    commitment: 'processed'
+  });
+
+  const pumpFunSDK = new PumpFunSDK(provider);
+  const swapService = new SwapService(connection);
+  const orderService = new OrderService();
+
+  const strategy = new PumpStrategy(
+    pumpFunSDK,
+    swapService,
+    orderService,
+    keypair.publicKey,
+    {
+      minSolBalance: 0.1,
+      maxPositionSize: 0.5,
+      rsiOversold: 30,
+      rsiOverbought: 70,
+      profitTarget: 0.15,
+      stopLoss: 0.05,
+      macdThreshold: 0,
+      volumeThreshold: 1,
+      depthRatioThreshold: 1.2
+    }
+  );
+
+  // Subscribe to slot updates
+  connection.onSlotChange((slot) => {
+    strategy.onBlockUpdate(slot.slot).catch(console.error);
+  });
+
+  console.log('Bot started successfully');
+
+  // Handle graceful shutdown
+  process.on('SIGINT', async () => {
+    console.log('Shutting down bot...');
+    // Cleanup code here if needed
+    process.exit();
+  });
 }
 
-main().catch(console.error);
+main().catch((error) => {
+  console.error('Bot crashed:', error);
+  process.exit(1);
+});

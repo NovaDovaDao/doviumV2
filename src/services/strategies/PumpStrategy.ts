@@ -1,14 +1,13 @@
-import SolanaService from "../solana/SolanaService.ts";
+import { PublicKey } from '@solana/web3.js';
 import {
-  RSI,
-  MACD,
-  StochasticOscillator,
-  VolumeProfile,
-  Volatility,
-  MarketDepth,
-  PriceData,
-  IndicatorConfig
-} from '../indicators/index.ts';
+  RSI, MACD, StochasticOscillator, VolumeProfile, 
+  Volatility, MarketDepth, PriceData, IndicatorConfig
+} from '../indicators/index';
+import { Logger } from '../../utils/logger';
+import { PumpFunSDK } from '../pumpfun/pumpfun';
+import { SwapService } from '../trading/swapService';
+import { OrderService } from '../trading/orderService';
+import { TradingSimulator } from '../simulation/tradingSimulator';
 
 interface StrategyIndicators {
   rsi: RSI;
@@ -19,6 +18,18 @@ interface StrategyIndicators {
   marketDepth: MarketDepth;
 }
 
+interface TradingConfig {
+  minSolBalance: number;
+  maxPositionSize: number;
+  rsiOversold: number;
+  rsiOverbought: number;
+  profitTarget: number;
+  stopLoss: number;
+  macdThreshold: number;
+  volumeThreshold: number;
+  depthRatioThreshold: number;
+}
+
 interface Position {
   entryPrice: number;
   amount: number;
@@ -27,9 +38,9 @@ interface Position {
 
 interface TradeMetrics {
   mint: string;
-  symbol: string;
-  name: string;
-  volumeSOL: number;
+  price: number;
+  volume: number;
+  timestamp: number;
 }
 
 export class PumpStrategy {
@@ -40,17 +51,29 @@ export class PumpStrategy {
   private priceHistory: Map<string, PriceData[]> = new Map();
   private lastTradeTime: Map<string, number> = new Map();
 
-  private simulatedBalance: number = 1;
-  private readonly PROFIT_TAKE = 0.15; // 15% profit target
-  private readonly STOP_LOSS = -0.05; // 5% stop loss
-  private readonly MIN_VOLUME = 1; // 1 SOL minimum volume
-  private readonly MIN_RSI_ENTRY = 30;
-  private readonly MAX_RSI_EXIT = 70;
+  private config: TradingConfig;
+
+  private simulator: TradingSimulator;
 
   constructor(
-    private tradingWallet: SolanaService,
-    config: IndicatorConfig = {}
+    private pumpFunSDK: PumpFunSDK,
+    private swapService: SwapService,
+    private orderService: OrderService,
+    private wallet: PublicKey,
+    config?: Partial<TradingConfig>
   ) {
+    this.config = {
+      minSolBalance: 0.1,
+      maxPositionSize: 1.0,
+      rsiOversold: 30,
+      rsiOverbought: 70,
+      profitTarget: 0.15,
+      stopLoss: 0.05,
+      macdThreshold: 0,
+      volumeThreshold: 1,
+      depthRatioThreshold: 1.2,
+      ...config
+    };
     this.indicators = {
       rsi: new RSI(config),
       macd: new MACD(config),
@@ -148,7 +171,38 @@ export class PumpStrategy {
 
   public async executeEntry(token: string, price: number, amount: number): Promise<void> {
     try {
-      // Simulate or execute actual trade here
+      const mint = new PublicKey(token);
+      const bondingCurve = await this.pumpFunSDK.getBondingCurveAccount(mint);
+      if (!bondingCurve) {
+        throw new Error('Bonding curve not found');
+      }
+
+      const globalAccount = await this.pumpFunSDK.getGlobalAccount();
+      
+      // Simulate the trade first
+      const solAmount = BigInt(amount * 1e9); // Convert SOL to lamports
+      const success = await this.simulator.simulateBuy(
+        mint,
+        bondingCurve,
+        solAmount,
+        globalAccount.initialVirtualTokenReserves
+      );
+
+      if (!success) {
+        this.logger.warn('Simulation failed, skipping real trade');
+        return;
+      }
+
+      // Log simulation stats
+      const stats = this.simulator.getSimulationStats();
+      this.logger.info('Current simulation stats:', stats);
+
+      // In simulation mode, we don't execute the real trade
+      if (process.env.SIMULATION_MODE === 'true') {
+        return;
+      }
+
+      // Execute actual trade
       this.positions.set(token, {
         entryPrice: price,
         amount,
@@ -167,6 +221,38 @@ export class PumpStrategy {
     try {
       const position = this.positions.get(token);
       if (!position) return;
+
+      const mint = new PublicKey(token);
+      const bondingCurve = await this.pumpFunSDK.getBondingCurveAccount(mint);
+      if (!bondingCurve) {
+        throw new Error('Bonding curve not found');
+      }
+
+      const globalAccount = await this.pumpFunSDK.getGlobalAccount();
+      
+      // Simulate the sell
+      const tokenAmount = BigInt(position.amount * 1e6); // Convert to smallest unit
+      const success = await this.simulator.simulateSell(
+        mint,
+        bondingCurve,
+        tokenAmount,
+        globalAccount.initialVirtualTokenReserves,
+        globalAccount.feeBasisPoints
+      );
+
+      if (!success) {
+        this.logger.warn('Simulation failed, skipping real trade');
+        return;
+      }
+
+      // Log simulation stats
+      const stats = this.simulator.getSimulationStats();
+      this.logger.info('Current simulation stats:', stats);
+
+      // In simulation mode, we don't execute the real trade
+      if (process.env.SIMULATION_MODE === 'true') {
+        return;
+      }
 
       const profitLoss = (price - position.entryPrice) / position.entryPrice;
       this.positions.delete(token);
