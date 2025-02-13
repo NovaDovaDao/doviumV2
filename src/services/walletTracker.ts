@@ -11,7 +11,24 @@ import type {
   HealthStatus,
   WalletStats,
 } from "../types/types";
-import { config, formatWalletName } from "../config/config";
+import { formatWalletName } from "../config/config";
+
+interface ParsedTokenAccountData {
+  program: string;
+  parsed: {
+    info: {
+      mint: string;
+      owner: string;
+      tokenAmount: {
+        amount: string;
+        decimals: number;
+        uiAmount: number;
+        uiAmountString: string;
+      };
+    };
+    type: string;
+  };
+}
 
 export class WalletTracker extends EventEmitter {
   private readonly connection: Connection;
@@ -36,39 +53,33 @@ export class WalletTracker extends EventEmitter {
     this.tokenMetadataCache = new Map();
   }
 
-  private async getTokenAccounts(
-    walletAddress: string
-  ): Promise<TokenBalance[]> {
-    try {
-      const pubkey = new PublicKey(walletAddress);
-      const accounts = await this.connection.getParsedTokenAccountsByOwner(
-        pubkey,
-        {
-          programId: new PublicKey(
-            "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-          ),
-        }
-      );
+private async getTokenAccounts(walletAddress: string): Promise<TokenBalance[]> {
+  try {
+    const pubkey = new PublicKey(walletAddress);
+    const accounts = await this.connection.getParsedTokenAccountsByOwner(
+      pubkey,
+      {
+        programId: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
+      }
+    );
 
-      return accounts.value.map((account) => {
-        const parsedData = account.account.data.parsed as ParsedAccountData;
-        const tokenData = parsedData.info;
-        return {
-          mint: tokenData.mint,
-          amount: BigInt(tokenData.tokenAmount.amount),
-          decimals: tokenData.tokenAmount.decimals,
-        };
-      });
-    } catch (error) {
-      this.emit(
-        "error",
-        `Error fetching token accounts for ${formatWalletName(
-          walletAddress
-        )}: ${error}`
-      );
-      return [];
-    }
+    return accounts.value.map((account) => {
+      const parsedData = account.account.data as ParsedTokenAccountData;
+      const tokenData = parsedData.parsed.info;
+      return {
+        mint: tokenData.mint,
+        amount: BigInt(tokenData.tokenAmount.amount),
+        decimals: tokenData.tokenAmount.decimals,
+      };
+    });
+  } catch (error) {
+    this.emit(
+      "error",
+      `Error fetching token accounts for ${formatWalletName(walletAddress)}: ${error}`
+    );
+    return [];
   }
+}
 
   public async setupWebSocketSubscription(
     walletAddress: string,

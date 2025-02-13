@@ -1,34 +1,51 @@
 // src/config/config.ts
-interface Wallet {
+
+export interface TradeSettings {
+  waitTimeBeforeBuy: number;
+  waitTimeBeforeSell: number;
+  minPoolSize: number;
+  takeProfit: number;
+  stopLoss: number;
+  slippageBps: number;
+  programAddress: string; // Add program address
+  copyTrading: {
+    enabled: boolean;
+    simulationMode: boolean;
+    simulationBalance: number;
+    minSolAmount: number;
+    fixedBuyAmount: number;
+    delayBeforeSellSeconds: number;
+    slippageBps: number;
+  };
+  tradeModes: {
+    yolo: boolean;
+    marry: boolean;
+    bro: boolean;
+    simulation: boolean;
+  };
+  simulation: {
+    initialBalance: number;   // in SOL
+    enabled: boolean;
+    logToFile: boolean;
+    logDirectory: string;
+  };
+}
+
+export interface Wallet {
   name: string;
   address: string;
   emoji: string;
+  copy: boolean;
   tags: string[];
 }
 
-interface Config {
+export interface Config {
   settings: {
     wsol_pc_mint: string;
     inspect_url: string;
     inspect_name: string;
     inspect_url_wallet: string;
-    show_max_duplicates: number;
-    show_duplicate_min_holders: number;
-    copyTrading: {
-      enabled: boolean;
-      simulationMode: boolean;
-      simulationBalance: number;
-      minSolAmount: number;
-      fixedBuyAmount: number;
-      delayBeforeSellSeconds: number;
-      slippageBps: number;
-      db: {
-        pnlTable: string;
-      };
-    };
-  };
-  db: {
-    db_name_tracker_transfers: string;
+    tradeSettings: TradeSettings;
   };
   wallets: Wallet[];
 }
@@ -36,74 +53,95 @@ interface Config {
 export const config: Config = {
   settings: {
     wsol_pc_mint: "So11111111111111111111111111111111111111112",
-    inspect_url: "https://gmgn.ai/sol/token/",
-    inspect_name: "👽 Open GMGN",
-    inspect_url_wallet: "https://gmgn.ai/sol/address/",
-    show_max_duplicates: 5,
-    show_duplicate_min_holders: 5,
-    copyTrading: {
-      enabled: true,
-      simulationMode: true,
-      simulationBalance: 1,
-      minSolAmount: 20,
-      fixedBuyAmount: 0.1,
-      delayBeforeSellSeconds: 15,
+    inspect_url: "https://solscan.io/token/",
+    inspect_name: "View on Solscan",
+    inspect_url_wallet: "https://solscan.io/account/",
+    tradeSettings: {
+      waitTimeBeforeBuy: 15,
+      waitTimeBeforeSell: 20,
+      minPoolSize: 100,
+      takeProfit: 50,
+      stopLoss: 30,
       slippageBps: 100,
-      db: {
-        pnlTable: "copy_trading_pnl",
+      programAddress: "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",
+      copyTrading: {
+        enabled: true,
+        simulationMode: true,
+        simulationBalance: 1,
+        minSolAmount: 20,
+        fixedBuyAmount: 0.1,
+        delayBeforeSellSeconds: 15,
+        slippageBps: 100,
       },
-    },
-  },
-  db: {
-    db_name_tracker_transfers: "src/db/holdings.db",
+      tradeModes: {
+        yolo: false,
+        marry: false,
+        bro: false,
+        simulation: true
+      },
+      simulation: {
+        enabled: false,
+        initialBalance: 10, // 10 SOL
+        logToFile: true,
+        logDirectory: './logs/simulation'
+      }
+    }
   },
   wallets: [
     {
       name: "mrfrog",
       address: "4DdrfiDHpmx55i4SPssxVzS9ZaKLb8qr45NKY9Er9nNh",
       emoji: "👽",
-      tags: [],
+      copy: false,
+      tags: ["whale"],
     },
     {
       name: "KK",
       address: "kQdJVZvix2BPCz2i46ErUPk2a74Uf37QZL5jsRdAD8y",
       emoji: "💰",
+      copy: false,
       tags: [],
     },
     {
       name: "frank",
       address: "CRVidEDtEUTYZisCxBZkpELzhQc9eauMLR3FWg74tReL",
       emoji: "👽",
+      copy: true,
       tags: [],
     },
     {
       name: "crypto rapper",
       address: "HPLsd96kTV6WN9Nyjbg3Z69nFQf5UJS1ovUhiJEG8mBM",
       emoji: "💰",
+      copy: false,
       tags: [],
     },
     {
       name: "dave Portnoy",
       address: "5rkPDK4JnVAumgzeV2Zu8vjggMTtHdDtrsd5o9dhGZHD",
       emoji: "💰",
+      copy: false,
       tags: [],
     },
     {
       name: "Cupseyy",
       address: "suqh5sHtr8HyJ7q8scBimULPkPpA557prMG47xCHQfK",
       emoji: "👽",
+      copy: false,
       tags: [],
     },
     {
       name: "mcdeomx",
       address: "CSFjH3Z7LCqFbFPLVYJHUmJuLRbnfW5jk7QsCxqfV1RB",
       emoji: "👽",
+      copy: false,
       tags: [],
     },
     {
       name: "sniperscandy",
       address: "ERCjfWc8ZYH2eCSzuhTn8CbSHorueEJ5XLpBvTe7ovVv",
       emoji: "👽",
+      copy: false,
       tags: [],
     },
   ],
@@ -143,10 +181,6 @@ export function getUniqueWallets() {
     }
   });
   return Array.from(uniqueWallets.values());
-}
-
-export function getCopyTradingConfig() {
-  return config.settings.copyTrading;
 }
 
 // Validation function to check for duplicate addresses
